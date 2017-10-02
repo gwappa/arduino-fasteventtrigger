@@ -6,5 +6,6 @@
 *.o
 *.s
 *.sym
+*.fzz
 .dep/
 .DS_Store
