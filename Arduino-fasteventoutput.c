@@ -61,8 +61,11 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 	};
 
 #define PORT_OUT   PORTB
+#define IO_REGISTER DDRB
 // SYNC: PB1 (pin 15)
 #define MASK_SYNC  (0x01<<1)
+// POWER: PB2 (pin 16)
+#define MASK_POWER (0x01<<2)
 // EVENT: PB3 (pin 17)
 #define MASK_EVENT (0x01<<3)
 
@@ -90,6 +93,12 @@ int main(void)
 	sei();
 
 	offset = 0;
+
+	IO_REGISTER |= MASK_POWER;
+	IO_REGISTER |= MASK_SYNC;
+	IO_REGISTER |= MASK_EVENT;
+
+	PORT_OUT |= MASK_POWER;
 
 	for (;;)
 	{
