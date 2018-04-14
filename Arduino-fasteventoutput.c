@@ -72,7 +72,7 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 #define	SYNC_ON		((uint8_t)'1')
 #define SYNC_OFF 	((uint8_t)'2')
 #define EVENT_ON	((uint8_t)'A')
-#define EVENT_OFF 	((uint8_t)'B')
+#define EVENT_OFF 	((uint8_t)'D')
 #define FLUSH_BUF 	((uint8_t)'F')
 #define CLEAR_BUF   ((uint8_t)'O')
 	  uint8_t	command 	= (uint8_t)'\0';
@@ -132,6 +132,32 @@ int main(void)
 				buf       = (buf << 2) | state;
 				offset++;
 				break;
+            // in case of multiplexed commands
+            case (SYNC_ON | EVENT_ON):
+                PORT_OUT |= MASK_SYNC | MASK_EVENT;
+                state    |= FLAG_SYNC | FLAG_EVENT;
+                buf       = (buf << 2) | state;
+                offset++;
+                break;
+            case (SYNC_ON | EVENT_OFF):
+                PORT_OUT  = (PORT_OUT | MASK_SYNC) & ~MASK_EVENT;
+                state     = (state | FLAG_SYNC) & ~FLAG_EVENT;
+                buf       = (buf << 2) | state;
+                offset++;
+                break;
+            case (SYNC_OFF | EVENT_ON):
+                PORT_OUT  = (PORT_OUT & ~MASK_SYNC) | MASK_EVENT;
+                state     = (state & ~FLAG_SYNC) | FLAG_EVENT;
+                buf       = (buf << 2) | state;
+                offset++;
+                break;
+            case (SYNC_OFF | EVENT_OFF):
+                PORT_OUT &= ~(MASK_SYNC | MASK_EVENT);
+                state    &= ~(FLAG_SYNC | FLAG_EVENT);
+                buf       = (buf << 2) | state;
+                offset++;
+                break;
+            // in case of buffer reset commands
 			case FLUSH_BUF:
 				for(;offset<4;offset++){
 					buf = (buf << 2) | state;
