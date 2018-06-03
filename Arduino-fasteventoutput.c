@@ -60,6 +60,8 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface =
 			},
 	};
 
+//#define SYNC_PULSES
+
 #define PORT_OUT   PORTB
 #define IO_REGISTER DDRB
 // SYNC: PB1 (pin 15)
@@ -83,12 +85,83 @@ const char 		FLAG_SYNC	= (char)0x01;
 const char 		FLAG_EVENT 	= (char)0x02;
 	  uint8_t	offset 		= 0;
 
+#ifdef SYNC_PULSES
+      bool      pulse       = false;
+
+ISR(TIMER1_OVF_vect) {
+    cli();
+    if (pulse) {
+        PORT_OUT &= ~MASK_SYNC;
+        pulse = false;
+    }
+    sei();
+}
+
+inline void initTimer(void) {
+    TCCR1A  = 0; // normal mode
+    TCCR1B  = (1 << CS12); // prescaler = 256
+    TIMSK1  = (1 << TOIE1);
+}
+
+inline void startSyncTimer(void) {
+    cli();
+    PORT_OUT |= MASK_SYNC;
+    pulse     = true;
+
+    TCNT1   = 0xFF01;
+    sei();
+}
+#else
+inline void initTimer(void) {
+    // do nothing
+}
+#endif
+
+inline void syncOn(void) {
+    if ( (state & FLAG_SYNC) == 0 ) {
+#ifdef SYNC_PULSES
+        startSyncTimer();
+#else
+        PORT_OUT |= MASK_SYNC;
+#endif
+        state    |= FLAG_SYNC;
+    }
+}
+
+inline void syncOff(void) {
+    if (state & FLAG_SYNC) {
+#ifdef SYNC_PULSES
+        startSyncTimer();
+#else
+        PORT_OUT &= ~MASK_SYNC;
+#endif
+        state    &= ~FLAG_SYNC;
+    }
+}
+
+inline void eventOn(void) {
+    if ( (state & FLAG_EVENT) == 0 ) {
+        PORT_OUT |= MASK_EVENT;
+        state    |= FLAG_EVENT;
+    }
+}
+
+inline void eventOff(void) {
+    if (state & FLAG_EVENT) {
+        PORT_OUT &= ~MASK_EVENT;
+        state    &= ~FLAG_EVENT;
+    }
+}
+
+
 /** Main program entry point. This routine contains the overall program flow, including initial
  *  setup of all components and the main program loop.
  */
 int main(void)
 {
 	SetupHardware();
+
+    initTimer();
 
 	sei();
 
@@ -109,51 +182,47 @@ int main(void)
 			command = (uint8_t)ReceivedByte;
 			switch(command){
 			case SYNC_ON:
-				PORT_OUT |= MASK_SYNC;
-				state    |= FLAG_SYNC;
+                syncOn();
 				buf       = (buf << 2) | state;
 				offset++;
 				break;
 			case SYNC_OFF:
-				PORT_OUT &= ~MASK_SYNC;
-				state    &= ~FLAG_SYNC;
+                syncOff();
 				buf       = (buf << 2) | state;
 				offset++;
 				break;
 			case EVENT_ON:
-				PORT_OUT |= MASK_EVENT;
-				state    |= FLAG_EVENT;
+                eventOn();
 				buf       = (buf << 2) | state;
 				offset++;
 				break;
 			case EVENT_OFF:
-				PORT_OUT &= ~MASK_EVENT;
-				state    &= ~FLAG_EVENT;
+                eventOff();
 				buf       = (buf << 2) | state;
 				offset++;
 				break;
             // in case of multiplexed commands
             case (SYNC_ON | EVENT_ON):
-                PORT_OUT |= MASK_SYNC | MASK_EVENT;
-                state    |= FLAG_SYNC | FLAG_EVENT;
+                eventOn();
+                syncOn();
                 buf       = (buf << 2) | state;
                 offset++;
                 break;
             case (SYNC_ON | EVENT_OFF):
-                PORT_OUT  = (PORT_OUT | MASK_SYNC) & ~MASK_EVENT;
-                state     = (state | FLAG_SYNC) & ~FLAG_EVENT;
+                eventOff();
+                syncOn();
                 buf       = (buf << 2) | state;
                 offset++;
                 break;
             case (SYNC_OFF | EVENT_ON):
-                PORT_OUT  = (PORT_OUT & ~MASK_SYNC) | MASK_EVENT;
-                state     = (state & ~FLAG_SYNC) | FLAG_EVENT;
+                eventOn();
+                syncOff();
                 buf       = (buf << 2) | state;
                 offset++;
                 break;
             case (SYNC_OFF | EVENT_OFF):
-                PORT_OUT &= ~(MASK_SYNC | MASK_EVENT);
-                state    &= ~(FLAG_SYNC | FLAG_EVENT);
+                eventOff();
+                syncOff();
                 buf       = (buf << 2) | state;
                 offset++;
                 break;

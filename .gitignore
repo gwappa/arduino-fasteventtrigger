@@ -7,5 +7,6 @@
 *.s
 *.sym
 *.fzz
+*.swp
 .dep/
 .DS_Store
